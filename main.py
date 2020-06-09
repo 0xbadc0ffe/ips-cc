@@ -1,9 +1,22 @@
 #!/usr/bin/env python3
 from netfilterqueue import NetfilterQueue
+import re #TODO: si puo' importare meno?
 
+# Parametri
 numero_queue = 33
+regexp_compilata = re.compile(b'CC{\w+}')
 
-def print_and_accept(pkt):
+# Funzione che analizza un pacchetto ricevuto
+# dalla coda. Dopo aver verificato che il
+# pacchetto e' IPv4, calcola la lunghezza
+# dell'header IP, estrae porta sorgente e
+# porta di destinazione, stampa a video i
+# byte ricevuti e infine, dopo aver
+# sottoposto i byte ricevuti ad una
+# ricerca in base all'espressione regolare
+# fornita, decide se lasciar passare il
+# pacchetto o rifiutarlo.
+def gestisci_pacchetto(pkt):
 	print('-------------')
 	payload = pkt.get_payload()
 	payload_hex = payload.hex()
@@ -29,9 +42,17 @@ def print_and_accept(pkt):
 	
 	# TODO: verificare se SYN e' settato, in tal caso -> accept()
 	print(pkt)
-	print(payload_hex)
+	#print(payload_hex)
+	print(payload)
 	print('-------------')
-	pkt.accept()
+	
+	# Ricerca dell'espressione regolare
+	match = regexp_compilata.search(payload)
+	if match:
+		pkt.drop()
+		print("Pacchetto droppato")
+	else:
+		pkt.accept()
 
 # Funzione che calcola la lunghezza del pacchetto IPv4
 # basandosi sul valore IHL (Internet Header Length).
@@ -44,8 +65,10 @@ def calcola_lunghezza_ipv4(carattere):
 	lunghezza = (ihl*32)//8
 	return lunghezza
 
+# Creazione e bind dell'oggetto di classe NetfilterQueue
 nfqueue = NetfilterQueue()
-nfqueue.bind(numero_queue, print_and_accept)
+nfqueue.bind(numero_queue, gestisci_pacchetto)
+print("ips-cc avviato")
 
 try:
 	nfqueue.run()
@@ -53,3 +76,4 @@ except KeyboardInterrupt:
 	print('')
 
 nfqueue.unbind()
+print("ips-cc terminato")
