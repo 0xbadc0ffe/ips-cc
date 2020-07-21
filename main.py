@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 from netfilterqueue import NetfilterQueue
 import re #TODO: si puo' importare meno?
+import time
+import my_logging as mylog
+
 
 # Parametri
 numero_queue = 33
@@ -65,10 +68,13 @@ def calcola_lunghezza_ipv4(carattere):
 	lunghezza = (ihl*32)//8
 	return lunghezza
 
+
 # Creazione e bind dell'oggetto di classe NetfilterQueue
 nfqueue = NetfilterQueue()
 nfqueue.bind(numero_queue, gestisci_pacchetto)
-print("ips-cc avviato")
+
+log = mylog.Log(time.time())
+log.uplog("ips-cc avviato")
 
 try:
 	nfqueue.run()
@@ -76,4 +82,5 @@ except KeyboardInterrupt:
 	print('')
 
 nfqueue.unbind()
-print("ips-cc terminato")
+log.uplog("ips-cc terminato")
+log.endlog()
