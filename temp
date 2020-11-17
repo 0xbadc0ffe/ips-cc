@@ -1,0 +1,39 @@
+[
+    {
+        "name": "SERVICE",
+        "port": 2222,
+        "firewall_direction": "INPUT",
+        "service_type": "Raw",
+        "regex_list": [
+            "lol ciao",
+            "loasx",
+            "appsa"
+        ]
+    },
+    {
+        "name": "SERVICE",
+        "port": 2223,
+        "firewall_direction": "OUTPUT",
+        "service_type": "Web",
+        "regex_list": [
+            "ppol-pds",
+            "aksllso"
+        ]
+    },
+    {
+        "name": "SERVICE",
+        "port": 3434,
+        "firewall_direction": "INPUT",
+        "service_type": "Raw",
+        "regex_list": []
+    },
+    {
+        "name": "SERVICE",
+        "port": 5000,
+        "firewall_direction": "INPUT",
+        "service_type": "Raw",
+        "regex_list": [
+            "cablaggionene ew"
+        ]
+    }
+]

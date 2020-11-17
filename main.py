@@ -1,86 +1,92 @@
 #!/usr/bin/env python3
+'''
+ ips-cc main script.
+ Edit parameters, append the iptables rule, then launch it
+ with "sudo ./main.py" or "sudo ./main.py -d" for debug mode.
+ This script will block any packet with the Data field matching
+ at least one of the regular expressions in regex_list.
+ In debug mode every packet will be printed on screen and saved in pcap file.
+'''
 from netfilterqueue import NetfilterQueue
-import re #TODO: si puo' importare meno?
-import time
-import my_logging as mylog
+import logger
+import analysis
+import utils
+import packet_handling
+import pcap
+import stats
+import atexit
+import os
+
+# Parameters
+queue_number = 33
+log_file = "logfile.log"
+pcap_file = "dropped-packets.pcap"
+services_file = "default-services.json"
 
 
-# Parametri
-numero_queue = 33
-regexp_compilata = re.compile(b'CC{\w+}')
+# Parameter that controls the packet dropping policy:
+# 0: only drop the packet;
+# 1: drop the packet and send a RST packet to kill the connection;
+# 2: drop the packet and send a ACK packet to continue the connection;
+# 3: no drop, only substitute (censor mode).
+dropping_policy = 1
 
-# Funzione che analizza un pacchetto ricevuto
-# dalla coda. Dopo aver verificato che il
-# pacchetto e' IPv4, calcola la lunghezza
-# dell'header IP, estrae porta sorgente e
-# porta di destinazione, stampa a video i
-# byte ricevuti e infine, dopo aver
-# sottoposto i byte ricevuti ad una
-# ricerca in base all'espressione regolare
-# fornita, decide se lasciar passare il
-# pacchetto o rifiutarlo.
-def gestisci_pacchetto(pkt):
-	print('-------------')
-	payload = pkt.get_payload()
-	payload_hex = payload.hex()
-	
-	# Verifica della versione di IP del pacchetto:
-	# Se non e' 4, non effettuo controlli
-	# e lo accetto.
-	versioneIP = payload_hex[0]
-	if versioneIP != '4':
-		print("Pacchetto non IPv4")
-		pkt.accept()
-		return
+# Checking root privileges
+if not utils.is_root():
+    print("You need root privileges to run this application!")
+    exit(-1)
 
-	inizioTCP = calcola_lunghezza_ipv4(payload_hex[1])
-
-	portaSource = payload[inizioTCP:inizioTCP+2].hex()
-	portaSourceint = int(portaSource, 16)
-	print("porta source: " + str(portaSourceint))
-	
-	portaDest = payload[inizioTCP+2:inizioTCP+4].hex()
-	portaDestint = int(portaDest, 16)
-	print("porta destinazione: " + str(portaDestint))
-	
-	# TODO: verificare se SYN e' settato, in tal caso -> accept()
-	print(pkt)
-	#print(payload_hex)
-	print(payload)
-	print('-------------')
-	
-	# Ricerca dell'espressione regolare
-	match = regexp_compilata.search(payload)
-	if match:
-		pkt.drop()
-		print("Pacchetto droppato")
-	else:
-		pkt.accept()
-
-# Funzione che calcola la lunghezza del pacchetto IPv4
-# basandosi sul valore IHL (Internet Header Length).
-#
-# Documentazione di riferimento:
-# https://en.wikipedia.org/wiki/IPv4#IHL
-def calcola_lunghezza_ipv4(carattere):
-	lunghezza = 20
-	ihl = int(carattere, 16)
-	lunghezza = (ihl*32)//8
-	return lunghezza
+# Clear the screen
+os.system("clear")
 
 
-# Creazione e bind dell'oggetto di classe NetfilterQueue
+# Checking debug flag status (-d or --debug)
+debug = utils.is_debug()
+
+# This sets the logger treshold level
+if debug:
+    log_level = "DEBUG"
+else:
+    log_level = "INFO"
+
+flags = utils.Flags()
+dropping_policy = flags.dropping_policy
+log_level = flags.log_level
+# convertire la variabile debug con log_level e fare i controlli 
+# if log_level == "DEBUG" or log_level == "ALL"?
+# oppure aggiungere la variabile self.debug ad utils se si vuole distinguere
+# modalità debug da log debug
+debug = flags.debug
+print(flags)
+
+# Indispensable objects instantiation
+log = logger.Log(log_file, log_level)
+shield = analysis.Shield(log, queue_number, services_file)
+handling = packet_handling.PacketHandling(log, shield, debug, dropping_policy)
+
+# Optional objects instantiation: comment them to disable
+statistics = stats.Stats(log, handling)
+pcap_exporter = pcap.PCAP(log, handling, pcap_file)
+
+log.uplog("Starting ips-cc")
+
+# NetfilterQueue object instantiation and binding
 nfqueue = NetfilterQueue()
-nfqueue.bind(numero_queue, gestisci_pacchetto)
+nfqueue.bind(queue_number, handling.handle_packet)
 
-log = mylog.Log(time.time())
-log.uplog("ips-cc avviato")
+# Define IPS behavior on exit
+def exit_handler():
+    log.uplog("Received Interrupt, shutting down")
+    shield.close_shield()
+    nfqueue.unbind()
+    log.uplog("Stopped ips-cc")
+    log.endlog()
 
+
+atexit.register(exit_handler)
+
+# "run()" is a blocking method. The program will close on CTRL-C
 try:
-	nfqueue.run()
+    nfqueue.run()
 except KeyboardInterrupt:
-	print('')
-
-nfqueue.unbind()
-log.uplog("ips-cc terminato")
-log.endlog()
+    pass

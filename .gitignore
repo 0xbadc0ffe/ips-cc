@@ -1,1 +1,6 @@
 __pycache__
+logfile.log
+dropped-packets.pcap
+default-services.conf
+default-services.json
+temp
